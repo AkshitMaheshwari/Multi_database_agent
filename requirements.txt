@@ -26,5 +26,4 @@ oracledb
 pymongo
 pymysql
 redis
-psycopg2
 psycopg2-binary
