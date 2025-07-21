@@ -25,7 +25,7 @@ google-generativeai
 oracledb
 pathlib
 pymongo
-pysql
+pymysql
 sqlite3
 redis
 psycopg2
