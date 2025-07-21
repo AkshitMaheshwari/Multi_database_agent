@@ -19,9 +19,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Page config
-st.set_page_config(page_title="SQL Chatbot", layout="wide",page_icon="🧠")
+st.set_page_config(page_title="Database Chatbot", layout="wide",page_icon="🧠")
 
-st.title("🧠 SQL Chatbot Interface")
+st.title("🧠 Multi Database Chatbot Interface")
 st.markdown("Ask questions about your database in natural language.")
 
 # llm = ChatOpenAI(model_name="gpt-4.1", api_key=os.getenv("OPENAI_API_KEY"), base_url="https://models.inference.ai.azure.com" )
@@ -252,10 +252,8 @@ User Request: "{user_query}"
                     with st.chat_message("assistant"):
                         with st.spinner("🧠 Processing your request..."):
                             try:
-                                # Get sample keys for context
                                 sample_keys = r.keys("*")[:10] if r.dbsize() > 0 else []
                                 
-                                # Create prompt for LLM to convert natural language to Redis commands
                                 redis_prompt = f"""
 You are a Redis expert. Convert the user's natural language request into Redis commands and execute them.
 
@@ -281,10 +279,8 @@ Example response:
 Only respond with valid JSON.
 """
 
-                                # Get LLM response
                                 response = llm.invoke(redis_prompt).content.strip()
                                 
-                                # Parse LLM response
                                 import json
                                 try:
                                     parsed_response = json.loads(response)
