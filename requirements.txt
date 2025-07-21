@@ -23,10 +23,8 @@ groq
 neo4j
 google-generativeai
 oracledb
-pathlib
 pymongo
 pymysql
-sqlite3
 redis
 psycopg2
 psycopg2-binary
