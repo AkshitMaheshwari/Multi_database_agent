@@ -1,5 +1,4 @@
 import streamlit as st
-import pymysql
 from pathlib import Path
 from langchain.agents import create_sql_agent
 from langchain.sql_database import SQLDatabase
@@ -17,148 +16,138 @@ import os
 import redis
 from dotenv import load_dotenv
 load_dotenv()
-
-# Page config
-st.set_page_config(page_title="Database Chatbot", layout="wide",page_icon="🧠")
+st.set_page_config(page_title="Database Chatbot", layout="wide",page_icon="🛢️")
 
 st.title("🧠 Multi Database Chatbot Interface")
 st.markdown("Ask questions about your database in natural language.")
 
-# llm = ChatOpenAI(model_name="gpt-4.1", api_key=os.getenv("OPENAI_API_KEY"), base_url="https://models.inference.ai.azure.com" )
-llm = ChatGroq(model_name="Gemma2-9b-It", api_key=os.getenv("GROQ_API_KEY"))
+# Initialize LLM at the top
+llm = ChatGroq(model_name="Gemma2-9b-It", groq_api_key=os.getenv("GROQ_API_KEY"))
 db_category = st.radio("Select Database Type", ["SQL Databases", "NoSQL Databases"])
-
-
-DB_DIALECT_MAP = {
-    "SQLite": "sqlite",
-    "MySQL": "mysql",
-    "PostgreSQL": "postgresql",
-    "Oracle": "oracle",
-    "DuckDB": "duckdb"
-}
-def generate_sql_prompt(user_question: str, table_info: str, dialect: str = "sqlite") -> str:
-    return f"""
-You are an expert SQL developer. Given the following table schema in {dialect}:
-
-{table_info}
-
-Convert the user's natural language query into a valid SQL query.
-Respond only with the SQL code.
-
-User query: "{user_question}"
-"""
 if db_category =="SQL Databases":
-    db_type = st.sidebar.selectbox("Choose DB Type", ["SQLite", "PostgreSQL", "MySQL","Oracle","DuckDB"])
-    selected_sql_dialect = DB_DIALECT_MAP.get(db_type)
 
-    # Get DB Connection URL
-    db_uri = None
-    if db_type == "SQLite":
-        sqlite_file = st.sidebar.file_uploader("Upload SQLite DB file", type=["db", "sqlite"])
-        if sqlite_file:
-            file_path = f"temp_db/{sqlite_file.name}"
-            os.makedirs("temp_db", exist_ok=True)
-            with open(file_path, "wb") as f:
-                f.write(sqlite_file.read())
-            db_uri = f"sqlite:///{file_path}"
-    elif db_type == "PostgreSQL":
-        use_url = st.sidebar.checkbox("Use full DATABASE_URL instead")
-        if use_url:
-            postgres_url = st.sidebar.text_input("Paste your PostgreSQL DATABASE_URL")
-            if postgres_url:
-                db_uri = postgres_url
+    def connection_string_type(db_choice):
+        if db_choice == "PostgreSQL":
+            return "postgresql://user:password@localhost/dbname"
+        elif db_choice == "MySQL":
+            return "mysql://user:password@localhost/dbname"
+        elif db_choice == "SQLite":
+            return "sqlite:///dbname.db"
+        elif db_choice == "Oracle":
+            return "oracle+cx_oracle://user:password@localhost:1521/dbname"
+        elif db_choice == "DuckDB":
+            return "duckdb:///path/to/database.duckdb"
         else:
-            host = st.sidebar.text_input("Host")
-            user = st.sidebar.text_input("User")
-            password = st.sidebar.text_input("Password", type="password")
-            dbname = st.sidebar.text_input("Database Name")
-            if host and user and password and dbname:
-                db_uri = f"postgresql://{user}:{password}@{host}/{dbname}"
-    elif db_type == "MySQL":
-        host = st.sidebar.text_input("Host")
-        user = st.sidebar.text_input("User")
-        password = st.sidebar.text_input("Password", type="password")
-        dbname = st.sidebar.text_input("Database Name")
-        if host and user and password and dbname:
-            db_uri = f"mysql+pymysql://{user}:{password}@{host}/{dbname}"
+            return None
 
-    elif db_type == "Oracle":
-        host = st.sidebar.text_input("Host")
-        port = st.sidebar.text_input("Port", value="1521")
-        service_name = st.sidebar.text_input("Service Name or SID")
-        user = st.sidebar.text_input("User")
-        password = st.sidebar.text_input("Password", type="password")
-        if host and port and service_name and user and password:
-            dsn = f"(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST={host})(PORT={port}))(CONNECT_DATA=(SERVICE_NAME={service_name})))"
-            db_uri = f"oracle+oracledb://{user}:{password}@{dsn}"
 
-    elif db_type == "DuckDB":
-        duckdb_file = st.sidebar.file_uploader("Upload DuckDB File (optional)", type=["duckdb"])
-        if duckdb_file:
-            os.makedirs("temp_db", exist_ok=True)
-            file_path = f"temp_db/{duckdb_file.name}"
-            with open(file_path, "wb") as f:
-                f.write(duckdb_file.read())
-            db_uri = f"duckdb:///{file_path}"
-        else:
-            db_uri = "duckdb:///:memory:"
+    # Initialize session state for database connection
+    if "db_choice" not in st.session_state:
+        st.session_state["db_choice"] = None
+        
+    if "connection_string" not in st.session_state:
+        st.session_state["connection_string"] = None
+
+    if "db_path" not in st.session_state:
+        st.session_state["db_path"] = None
+
     
-    if db_uri:
-        st.success("✅ Database connected.")
 
 
-        db = SQLDatabase.from_uri(db_uri)
+    # ask user to choose a database
+    st.session_state["db_choice"]  = st.sidebar.selectbox(
+        "Choose a database",
+        ("PostgreSQL", "MySQL", "SQLite", "Oracle", "DuckDB"),
+    )
 
-        # SQL agent
-        toolkit = SQLDatabaseToolkit(db=db, llm=llm)
-        agent = create_sql_agent(
-            llm=llm,
-            toolkit=toolkit,
-            verbose=True,
-            agent_type=AgentType.OPENAI_FUNCTIONS,
+
+    if st.session_state["db_choice"] is None:
+        st.error("Please select a database to continue.")
+        st.stop()
+
+    # add line break
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### Database Connection")
+
+
+
+        
+        
+    # ask for connection string
+    if st.session_state["db_choice"] == "SQLite":
+        st.session_state["db_path"] = st.sidebar.text_input(
+            "Enter your SQLite database file path:",
+            placeholder=f"e.g. /path/to/your/database.db"
         )
+    st.session_state["connection_string"] = st.sidebar.text_input(
+            "Enter your database connection string:",
+            placeholder=f"e.g. {connection_string_type(st.session_state['db_choice'])}"
+    )
 
+
+
+    if not st.session_state["connection_string"]:
+            st.sidebar.error("Please enter a valid connection string.")
+            st.warning("You need to provide a connection string to connect to the database.")
+            st.stop()
+    
+    st.sidebar.success(f"You selected: {st.session_state['db_choice']}")
+
+
+    with st.expander("Database Connection Details", expanded=False):
+        st.write(f"**Database Type:** {st.session_state['db_choice']}")
+        st.write(f"**Connection String:** {st.session_state['connection_string']}")
+        st.write(f"**Model:** ChatGroq - Gemma2-9b-It")
         
-        if "messages" not in st.session_state:
-            st.session_state.messages = []
-
         
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.write(msg["content"])
-
-        # input
-        user_query = st.chat_input("Ask your database anything...")
-        if user_query:
+    with st.spinner("Setting up the db connection..."):
+        if st.session_state["db_choice"] == "SQLite":
+            # For SQLite, we use the file path directly
+            db_path = st.session_state["db_path"]
+            if not db_path:
+                st.error("Please provide a valid SQLite database file path.")
+                st.stop()
+            creator = lambda: sqlite3.connect(db_path)
+            db = SQLDatabase(create_engine("sqlite:///", creator=creator))
             
-            with st.chat_message("user"):
-                st.write(user_query)
-            st.session_state.messages.append({"role": "user", "content": user_query})
-
+        else:
+            # For other databases, we use the connection string
+            connection_string = st.session_state["connection_string"]
+            if not connection_string:
+                st.error("Please provide a valid connection string.")
+                st.stop()
+            db = SQLDatabase(create_engine(connection_string))
             
-            st.session_state["last_user_query"] = user_query
+    toolkit = SQLDatabaseToolkit(db=db, llm=llm)
+        
+    agent = create_sql_agent(
+        llm=llm,
+        toolkit=toolkit,
+        verbose=True,
+        agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION
+    )
+        
+    if "messages" not in st.session_state or st.sidebar.button("Clear message history"):
+        st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
 
-            # query
-            with st.chat_message("assistant"):
-                streamlit_callback = StreamlitCallbackHandler(st.container())
-                response = agent.run(user_query, callbacks=[streamlit_callback])
-                st.session_state.messages.append({"role": "assistant", "content": response})
-                st.write(response)
+    for msg in st.session_state.messages:
+        st.chat_message(msg["role"]).write(msg["content"])
+
+                
 
         
-        st.sidebar.markdown("---")
-        if st.sidebar.button("🔄 Convert last input to SQL"):
-            if "last_user_query" in st.session_state:
-                nl_input = st.session_state["last_user_query"]
-                schema = db.get_table_info()
-                dialect = selected_sql_dialect
-                prompt = generate_sql_prompt(nl_input, schema, dialect=dialect)
-                sql_response = llm.invoke(prompt)
-                st.sidebar.code(sql_response)
-            else:
-                st.sidebar.warning("Please ask something in the chat first.")
-    else:
-        st.warning("Please fill in database details in the sidebar.")
+    # Ask user to input a query
+    user_query = st.chat_input(placeholder="Ask anything from the database")
+
+    if user_query:
+        st.session_state.messages.append({"role": "user", "content": user_query})
+        st.chat_message("user").write(user_query)
+
+        with st.chat_message("assistant"):
+            streamlit_callback=StreamlitCallbackHandler(st.container())
+            response=agent.run(user_query,callbacks=[streamlit_callback])
+            st.session_state.messages.append({"role":"assistant","content":response})
+            st.write(response)
 elif db_category == "NoSQL Databases":
     nosql_type = st.sidebar.selectbox("Choose NoSQL DB Type", ["MongoDB", "Redis"])
     
@@ -252,8 +241,10 @@ User Request: "{user_query}"
                     with st.chat_message("assistant"):
                         with st.spinner("🧠 Processing your request..."):
                             try:
+                                # Get sample keys for context
                                 sample_keys = r.keys("*")[:10] if r.dbsize() > 0 else []
                                 
+                                # Create prompt for LLM to convert natural language to Redis commands
                                 redis_prompt = f"""
 You are a Redis expert. Convert the user's natural language request into Redis commands and execute them.
 
@@ -279,8 +270,10 @@ Example response:
 Only respond with valid JSON.
 """
 
+                                # Get LLM response
                                 response = llm.invoke(redis_prompt).content.strip()
                                 
+                                # Parse LLM response
                                 import json
                                 try:
                                     parsed_response = json.loads(response)
@@ -408,4 +401,5 @@ Only respond with valid JSON.
 
             except Exception as e:
                 st.error(f"❌ Could not connect to Redis: {e}")
+
 
