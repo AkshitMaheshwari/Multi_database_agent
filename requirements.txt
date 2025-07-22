@@ -3,16 +3,9 @@ python-dotenv
 langchain-community
 langchain-text-splitters
 langchain-openai
-chromadb
-sentence_transformers
-langchain_huggingface
-faiss-cpu
-langchain_chroma
 duckdb
-pandas
 openai
 langchain-groq
-huggingface_hub
 mysql-connector-python
 duckduckgo_search==5.3.1b1
 validators==0.28.1
@@ -20,11 +13,8 @@ SQLAlchemy
 langchain_core
 streamlit
 groq
-neo4j
-google-generativeai
 oracledb
 pymongo
-pymysql
 redis
-psycopg2-binary==2.9.10
+psycopg2-binary>=2.9.10
 
